@@ -29,6 +29,14 @@ table{border-collapse:collapse;font-size:14px}td{border-bottom:1px solid #f7d0e4
 <section data-t="📂 Entrada"><div class="card">
 <div class="tip">¿Qué hace esto? Aquí metes tu archivo. Si es audio o video, lo escucho como sonido. Si no (foto, PDF, texto, zip…), leo sus bytes como si fueran sonido, para que lo "oigas" y lo veas.</div>
 <div id="drop">📥 Arrastra aquí tu archivo<br><small>o toca para elegirlo</small><input type="file" id="f" hidden></div>
+<div id="recBox" style="margin:10px 0;padding:12px;border:2px dashed #f06bb0;border-radius:16px;background:#fff5fa">
+<div class="row"><button id="recB" style="font-size:20px;padding:14px 26px;background:#e8479b;color:#fff;border:none;border-radius:30px;cursor:pointer">🎙️ Grabar</button>
+<button id="recStop" hidden style="font-size:20px;padding:14px 26px;background:#444;color:#fff;border:none;border-radius:30px;cursor:pointer">⏹️ Parar</button>
+<span id="recInd" hidden style="color:#e00;font-weight:bold"><span id="recDot" style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#e00;vertical-align:middle"></span> GRABANDO <span id="recT">0:00</span> / 5:00</span>
+<a id="recDl" hidden class="mini" style="padding:8px 14px;background:#ffd6ea;border-radius:20px;color:#a01a62;font-weight:bold;text-decoration:none">💾 Bajar grabación (WAV)</a></div>
+<canvas id="recWave" width="600" height="60" hidden style="width:100%;max-width:600px;background:#1b0a17;border-radius:10px;margin-top:6px"></canvas>
+<div id="recMsg" style="color:#b0005a;font-weight:bold;min-height:18px"></div>
+<small>💡 Ojo: los micrófonos de celular (y muchos de compu) suelen cortar arriba de 16–20 kHz, así que los sonidos agudísimos casi nunca se graban. Para buscar marcas ultra agudas, mejor sube el archivo original.</small></div>
 <div class="row"><button class="alt" id="demoB">🧪 Probar con el sonido de muestra (trae algo escondido 😏)</button></div>
 <div class="row"><label>Si no es audio, leer los bytes a</label><select id="rate"><option>8000</option><option>22050</option><option selected>44100</option><option>48000</option></select><label>muestras por segundo</label>
 <label><input type="checkbox" id="forceBytes"> Leer bytes crudos aunque sea audio</label></div>
@@ -252,4 +260,44 @@ function seek(t){const was=playing;stop();offset=Math.max(0,Math.min(A.dur-0.01,
 $('play').onclick=()=>{if(!A)return;playing?stop():play();};$('seek').oninput=()=>A&&seek($('seek').value/1000*A.dur);
 function loop(){requestAnimationFrame(loop);if(!A||!playing)return;const p=pos();$('tm').textContent=fmt(p)+' / '+fmt(A.dur);$('seek').value=p/A.dur*1000;overlays();
 if($('live').checked&&secs[3].classList.contains('on')){const d=new Float32Array(an.frequencyBinCount);an.getFloatFrequencyData(d);const n=Math.floor(d.length*Math.min(1,20000/(ctx.sampleRate/2))),r=new Float32Array(n);for(let i=0;i<n;i++)r[i]=Math.max(0,Math.min(1,(d[i]+100)/70));hist.push(r);if(hist.length>200)hist.shift();drawMode();}}loop();
-</script></body></html>
+</script>
+<script>
+(function(){const $=id=>document.getElementById(id);let st=null,mr=null,chunks=[],pcm=[],node=null,rctx=null,srcN=null,t0=0,timer=null,an2=null,raf=0,recSR=48000,stopping=false;
+const MAX=300;const msg=t=>{$('recMsg').textContent=t;};
+function fmt(s){s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function wav(chs,sr){const n=chs[0].length,nc=chs.length,b=new ArrayBuffer(44+n*nc*2),v=new DataView(b);const w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+w(0,'RIFF');v.setUint32(4,36+n*nc*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,nc,true);v.setUint32(24,sr,true);v.setUint32(28,sr*nc*2,true);v.setUint16(32,nc*2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*nc*2,true);
+let o=44;for(let i=0;i<n;i++)for(let c=0;c<nc;c++){const x=Math.max(-1,Math.min(1,chs[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2;}return new Blob([b],{type:'audio/wav'});}
+function errText(e){const n=e&&e.name;
+if(n==='NotAllowedError'||n==='SecurityError')return '🙈 No me dieron permiso para usar el micrófono. Toca el candadito 🔒 junto a la dirección de la página → Micrófono → Permitir, y vuelve a tocar 🎙️ Grabar. En celular también revisa Ajustes → (tu navegador) → Micrófono.';
+if(n==='NotFoundError'||n==='OverconstrainedError'||n==='DevicesNotFoundError')return '🎤❓ No encontré ningún micrófono. Conecta uno (o unos audífonos con micro) y vuelve a intentar.';
+if(n==='NotReadableError')return '🎤 El micrófono está ocupado por otra app (Zoom, WhatsApp…). Ciérrala y vuelve a intentar.';
+return '😵 No pude grabar: '+(e&&e.message||e);}
+async function start(){msg('');
+if(!window.isSecureContext||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msg('🔐 El navegador sólo deja grabar en páginas seguras (que empiezan con https://). Abre la app desde https://mandybarbie2205.github.io/rayos-x/ y vuelve a intentar.');return;}
+try{st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}catch(e){msg(errText(e));return;}
+try{rctx=new AudioContext({sampleRate:48000});}catch(e){rctx=new AudioContext();}recSR=rctx.sampleRate;if(rctx.state==='suspended')await rctx.resume();
+srcN=rctx.createMediaStreamSource(st);an2=rctx.createAnalyser();an2.fftSize=1024;srcN.connect(an2);
+pcm=[];node=rctx.createScriptProcessor(4096,1,1);node.onaudioprocess=e=>{pcm.push(new Float32Array(e.inputBuffer.getChannelData(0)));};
+const mute=rctx.createGain();mute.gain.value=0;srcN.connect(node);node.connect(mute);mute.connect(rctx.destination);
+chunks=[];mr=null;if(window.MediaRecorder){try{mr=new MediaRecorder(st);mr.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};mr.start(500);}catch(e){mr=null;}}
+t0=performance.now();stopping=false;$('recB').hidden=true;$('recStop').hidden=false;$('recInd').hidden=false;$('recWave').hidden=false;$('recDl').hidden=true;
+timer=setInterval(()=>{const s=(performance.now()-t0)/1000;$('recT').textContent=fmt(s);$('recDot').style.opacity=(Math.floor(s*2)%2)?0.3:1;if(s>=MAX){msg('⏱️ Llegamos a 5 minutos, paré la grabación.');stop();}},250);draw();}
+function draw(){const c=$('recWave'),g=c.getContext('2d'),d=new Float32Array(an2.fftSize);an2.getFloatTimeDomainData(d);let p=0;for(const x of d)p=Math.max(p,Math.abs(x));
+g.fillStyle='#1b0a17';g.fillRect(0,0,c.width,c.height);g.fillStyle=p>0.9?'#ff3b3b':'#ff7ac0';g.fillRect(0,c.height-6,c.width*Math.min(1,p),6);
+g.strokeStyle='#ffb3d9';g.beginPath();for(let i=0;i<d.length;i++){const x=i/d.length*c.width,y=(1-d[i])*(c.height-8)/2;i?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();raf=requestAnimationFrame(draw);}
+async function stop(){if(stopping)return;stopping=true;clearInterval(timer);cancelAnimationFrame(raf);
+const done=new Promise(r=>{if(mr&&mr.state!=='inactive'){mr.onstop=r;mr.stop();}else r();});await done;
+try{node.disconnect();srcN.disconnect();}catch(e){}st.getTracks().forEach(t=>t.stop());
+$('recStop').hidden=true;$('recInd').hidden=true;$('recWave').hidden=true;$('recB').hidden=false;msg('Procesando la grabación… ⏳');
+let chs=null,sr=recSR;
+if(chunks.length){try{const ab=await new Blob(chunks,{type:mr.mimeType}).arrayBuffer();const d=await rctx.decodeAudioData(ab);sr=d.sampleRate;chs=[];for(let c=0;c<Math.min(2,d.numberOfChannels);c++)chs.push(d.getChannelData(c).slice(0,sr*MAX));}catch(e){chs=null;}}
+if(!chs||!chs[0].length){const n=pcm.reduce((a,b)=>a+b.length,0),L=new Float32Array(n);let o=0;for(const b of pcm){L.set(b,o);o+=b.length;}chs=[L.slice(0,recSR*MAX)];sr=recSR;}
+rctx.close();if(!chs[0].length){msg('🤔 La grabación salió vacía. Intenta otra vez.');return;}
+const now=new Date(),name='grabacion_'+String(now.getHours()).padStart(2,'0')+'-'+String(now.getMinutes()).padStart(2,'0')+'-'+String(now.getSeconds()).padStart(2,'0')+'.wav';
+const blob=wav(chs,sr),a=$('recDl');if(a.href)URL.revokeObjectURL(a.href);a.href=URL.createObjectURL(blob);a.download=name;a.hidden=false;
+msg('✅ Grabé '+fmt(chs[0].length/sr)+' ('+(sr/1000)+' kHz). ¡Ya la estoy analizando!');
+window.loadFile(new File([blob],name,{type:'audio/wav'}));}
+$('recB').onclick=start;$('recStop').onclick=stop;})();
+</script>
+</body></html>
