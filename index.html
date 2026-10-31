@@ -1,0 +1,255 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rayos X del sonido 🩻 Mira lo que esconde cualquier archivo</title>
+<style>
+body{font-family:system-ui,sans-serif;background:linear-gradient(#ffe4f1,#fff);margin:0;color:#5a2a48}
+main{max-width:980px;margin:auto;padding:14px}h1{text-align:center;color:#d6338a;margin:4px 0}
+.card{background:#fff;border-radius:18px;padding:14px;margin:12px 0;box-shadow:0 4px 14px #f5a3c955}
+button{background:#e64c9c;color:#fff;border:0;border-radius:24px;padding:10px 16px;font-size:16px;margin:5px 4px 0 0;cursor:pointer}
+button.alt{background:#a66cd6}button.mini{padding:4px 10px;font-size:14px}button:disabled{opacity:.4}
+.tip{background:#fdf2ff;border-left:5px solid #a66cd6;border-radius:8px;padding:8px 10px;font-size:14px;margin:4px 0 10px}
+.aviso{background:#fff0f7;border:2px dashed #e64c9c;border-radius:14px;padding:10px;font-size:14px;margin:8px 0}
+#tabs{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;position:sticky;top:0;z-index:5;padding:6px 0;background:#ffe4f1ee}
+#tabs button{background:#f7c6df;color:#5a2a48}#tabs button.on{background:#e64c9c;color:#fff}
+section{display:none}section.on{display:block}
+#drop{border:3px dashed #e64c9c;border-radius:18px;padding:26px;text-align:center;font-size:18px;background:#fff6fb;cursor:pointer}#drop.over{background:#ffd6ec}
+canvas{width:100%;display:block;background:#1d0a18;border-radius:10px}
+.wrap{position:relative}.wrap canvas.ov{position:absolute;left:0;top:0;background:transparent;cursor:crosshair}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:4px 0}.row label{font-size:14px;font-weight:600}
+input[type=range]{accent-color:#e64c9c;width:150px}select,input[type=text],input[type=number]{font-size:15px;border:2px solid #f7b6d6;border-radius:10px;padding:5px}
+table{border-collapse:collapse;font-size:14px}td{border-bottom:1px solid #f7d0e4;padding:4px 8px}
+.find{border-radius:12px;padding:10px;margin:8px 0;background:#fff6fb;border-left:6px solid #f7b6d6}.find.hit{border-left-color:#e64c9c;background:#ffeef7}
+.find h4{margin:0 0 4px}pre{white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:220px;overflow:auto;background:#fff6fb;border-radius:8px;padding:6px}
+#player{position:sticky;bottom:0;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 14px #f5a3c955;padding:8px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#seek{flex:1;min-width:160px}progress{width:100%;accent-color:#e64c9c}#ascii{font-family:monospace;font-size:7px;line-height:7px;color:#d6338a;max-height:none;white-space:pre;overflow:auto}
+</style></head><body><main>
+<h1>🩻 Rayos X del sonido</h1>
+<p style="text-align:center;margin:0">Échale cualquier archivo (canción, audio, video, foto, PDF, lo que sea) y te enseño cómo se ve por dentro, si esconde algo raro… y hasta lo convierto en arte loco ✨</p>
+<div id="tabs"></div>
+
+<section data-t="📂 Entrada"><div class="card">
+<div class="tip">¿Qué hace esto? Aquí metes tu archivo. Si es audio o video, lo escucho como sonido. Si no (foto, PDF, texto, zip…), leo sus bytes como si fueran sonido, para que lo "oigas" y lo veas.</div>
+<div id="drop">📥 Arrastra aquí tu archivo<br><small>o toca para elegirlo</small><input type="file" id="f" hidden></div>
+<div class="row"><button class="alt" id="demoB">🧪 Probar con el sonido de muestra (trae algo escondido 😏)</button></div>
+<div class="row"><label>Si no es audio, leer los bytes a</label><select id="rate"><option>8000</option><option>22050</option><option selected>44100</option><option>48000</option></select><label>muestras por segundo</label>
+<label><input type="checkbox" id="forceBytes"> Leer bytes crudos aunque sea audio</label></div>
+<progress id="pg" value="0" max="1" hidden></progress><div id="msg" style="font-weight:bold;color:#d6338a;min-height:20px"></div>
+<table id="info"></table></div></section>
+
+<section data-t="🌈 Espectrograma"><div class="card">
+<div class="tip">¿Qué hace esto? Es la "foto" del sonido en el tiempo: de izquierda a derecha pasa el tiempo, abajo están los sonidos graves y arriba los agudos. Lo brillante es donde hay sonido. Pasa el dedo o el mouse para ver el tiempo y los Hz; toca para brincar ahí.</div>
+<div class="row"><label>Canal</label><select id="chan"><option value="m">Mezcla</option></select>
+<label>Detalle (FFT)</label><select id="nfft"><option>1024</option><option selected>2048</option><option>4096</option><option>8192</option></select>
+<label>Escala</label><select id="fscale"><option value="lin">Normal</option><option value="log">Log (más detalle en lo grave)</option></select>
+<label>Colores</label><select id="pal"><option value="rosa">Rosa 💖</option><option value="fuego">Fuego 🔥</option><option value="arcoiris">Arcoíris 🌈</option><option value="gris">Gris</option></select></div>
+<div class="row"><label>Contraste</label><input type="range" id="con" min="30" max="120" value="80"><label>Brillo</label><input type="range" id="bri" min="-40" max="40" value="0">
+<label>Zoom tiempo</label><input type="range" id="zt" min="1" max="60" value="1" step="0.5"><label>Mover</label><input type="range" id="pt" min="0" max="1000" value="0"></div>
+<div class="row"><label>Desde (Hz)</label><input type="number" id="f0" value="0" min="0" step="500" style="width:80px"><label>Hasta (Hz)</label><input type="number" id="f1" value="24000" min="500" step="500" style="width:90px">
+<button class="mini alt" id="resetV">↺ Ver todo</button><button class="mini" id="pngS">🖼️ Bajar PNG</button></div>
+<div class="wrap"><canvas id="sp" width="940" height="420"></canvas><canvas id="spo" class="ov" width="940" height="420"></canvas></div>
+<div id="cur" style="font-size:14px;min-height:18px">🖱️ —</div>
+<b style="font-size:14px">〰️ Forma de onda</b><div class="wrap"><canvas id="wv" width="940" height="110"></canvas><canvas id="wvo" class="ov" width="940" height="110"></canvas></div>
+<b style="font-size:14px">🔊 Qué tan fuerte suena en el tiempo</b><div class="wrap"><canvas id="ld" width="940" height="90"></canvas><canvas id="ldo" class="ov" width="940" height="90"></canvas></div></div></section>
+
+<section data-t="🕵️ Detector"><div class="card">
+<div class="tip">¿Qué hace esto? Busco solita cosas raras: sonidos agudísimos, pitidos fijos (como marcas de agua o "faros"), tonos de teléfono, silencios, diferencias entre izquierda y derecha, morse y textos escondidos en los bytes.</div>
+<div class="aviso">🧐 <b>Honestidad:</b> esto son pistas, no pruebas. Una canción normal puede tener agudos o pitidos sin que nadie haya escondido nada, y algo bien escondido se me puede pasar.</div>
+<div class="row"><label>Considerar "agudísimo" arriba de</label><select id="cut"><option>15000</option><option selected>17000</option><option>18000</option></select><label>Hz</label>
+<label>Morse en (Hz, opcional)</label><input type="number" id="mf" placeholder="auto" style="width:90px"><button id="runD">🔎 Volver a buscar</button></div>
+<div id="finds"></div>
+<b>🚨 Zona sospechosa (la parte aguda, aumentada)</b><div class="tip">Aquí agrando y le subo el brillo a lo más agudo (de 14 kHz para arriba). Si alguien escondió letras o un dibujo, aquí suele aparecer.</div>
+<canvas id="sus" width="940" height="260"></canvas><button class="mini" id="pngZ">🖼️ Bajar PNG</button></div></section>
+
+<section data-t="🤪 Modos locos"><div class="card">
+<div class="tip">¿Qué hace esto? Convierte tu sonido en arte: letras, mandalas, montañas, la danza izquierda-derecha o una pintura. Dale ▶️ abajo y prende "en vivo" para que se mueva con la música.</div>
+<div class="row"><select id="mode"><option value="letras">🔤 Letras</option><option value="mandala">🌸 Mandala</option><option value="montanas">🏔️ Montañas 3D</option><option value="liss">💫 Izquierda vs derecha (osciloscopio)</option><option value="pintura">🎨 Pintura</option></select>
+<label><input type="checkbox" id="live"> En vivo mientras suena</label><button class="mini" id="pngM">🖼️ Bajar PNG</button></div>
+<div class="row" id="letOpts"><label>Escribe una palabra (opcional)</label><input type="text" id="word" value="" placeholder="ej. BARBIE" maxlength="30"><label>Estilo</label><select id="lstyle"><option value="ascii">Arte con letras (ASCII)</option><option value="palabra">Tu palabra con la forma del sonido</option></select></div>
+<div id="modeTip" class="tip"></div>
+<canvas id="cz" width="940" height="560"></canvas><pre id="ascii" hidden></pre></div></section>
+</main>
+<div id="player"><button id="play" disabled>▶️ Play</button><span id="tm">0:00 / 0:00</span><input type="range" id="seek" min="0" max="1000" value="0"><small>🔈 bájale si es agudo</small></div>
+<script id="dsp">
+const FONT={A:'01110100011000111111100011000110001',B:'11110100011000111110100011000111110',C:'01110100011000010000100001000101110',D:'11110100011000110001100011000111110',E:'11111100001000011110100001000011111',F:'11111100001000011110100001000010000',G:'01110100011000010111100011000101111',H:'10001100011000111111100011000110001',I:'01110001000010000100001000010001110',J:'00111000100001000010000101001001100',K:'10001100101010011000101001001010001',L:'10000100001000010000100001000011111',M:'10001110111010110101100011000110001',N:'10001100011100110101100111000110001',O:'01110100011000110001100011000101110',P:'11110100011000111110100001000010000',Q:'01110100011000110001101011001001101',R:'11110100011000111110101001001010001',S:'01111100001000001110000010000111110',T:'11111001000010000100001000010000100',U:'10001100011000110001100011000101110',V:'10001100011000110001100010101000100',W:'10001100011000110101101011010101010',X:'10001100010101000100010101000110001',Y:'10001100010101000100001000010000100',Z:'11111000010001000100010001000011111',
+'0':'01110100011001110101110011000101110','1':'00100011000010000100001000010001110','2':'01110100010000100010001000100011111','3':'11110000010000101110000010000111110','4':'00010001100101010010111110001000010','5':'11111100001111000001000011000101110','6':'00110010001000011110100011000101110','7':'11111000010001000100010000100001000','8':'01110100011000101110100011000101110','9':'01110100011000101111000010001001100',
+'!':'00100001000010000100001000000000100','?':'01110100010000100010001000000000100','.':'00000000000000000000000000110001100',',':'00000000000000000000001100010001000','-':'00000000000000011111000000000000000',':':'00000011000110000000011000110000000','♥':'00000010101111111111011100010000000',' ':'00000000000000000000000000000000000'};
+function textMatrix(text,vs){vs=vs||4;const t=text.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/<3/g,'♥');const cols=[];
+const pushCol=v=>{cols.push(v);cols.push(v);};pushCol(new Array(7).fill(0));
+for(const ch of t){const g=FONT[ch]||FONT['?'];for(let c=0;c<5;c++){const v=[];for(let r=0;r<7;r++)v.push(+g[r*5+c]);pushCol(v);}pushCol(new Array(7).fill(0));}
+const R=7*vs+2,M=[];for(let r=0;r<R;r++){const row=new Float32Array(cols.length);const fr=r-1;if(fr>=0&&fr<7*vs){const gr=Math.floor(fr/vs);for(let c=0;c<cols.length;c++)row[c]=cols[c][gr];}M.push(row);}return M;}
+function synthMatrix(M,sr,fLo,fHi,dur,vol){const N=Math.round(dur*sr),nR=M.length,nC=M[0].length,y=new Float32Array(N),r=rng(11);
+for(let k=0;k<nR;k++){const row=M[k];if(!row.some(v=>v>0.02))continue;const f=fHi-(fHi-fLo)*k/Math.max(1,nR-1),w=2*Math.PI*f/sr,ph=r()*6.283;
+for(let i=0;i<N;i++){const c=i/N*nC-0.5,a=Math.max(0,Math.floor(c)),b=Math.min(nC-1,a+1),fr=Math.min(1,Math.max(0,c-a)),amp=row[a]*(1-fr)+row[b]*fr;if(amp>0.001)y[i]+=amp*Math.sin(w*i+ph);}}
+norm(y,vol);const e=Math.min(480,N>>3);for(let i=0;i<e;i++){y[i]*=i/e;y[N-1-i]*=i/e;}return y;}
+// ===== ANÁLISIS (se prueba también en node) =====
+function fft(re,im,inv){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t;}}
+for(let len=2;len<=n;len<<=1){const a=(inv?2:-2)*Math.PI/len,wr=Math.cos(a),wi=Math.sin(a);for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let k=0;k<len/2;k++){const p=i+k,q=p+len/2,tr=re[q]*cr-im[q]*ci,ti=re[q]*ci+im[q]*cr;re[q]=re[p]-tr;im[q]=im[p]-ti;re[p]+=tr;im[p]+=ti;const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t;}}}
+if(inv)for(let i=0;i<n;i++){re[i]/=n;im[i]/=n;}}
+function norm(y,p=0.9){let m=0;for(const v of y)m=Math.max(m,Math.abs(v));if(m>0){const g=p/m;for(let i=0;i<y.length;i++)y[i]*=g;}return y;}
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+const WINS={};function hann(n){return WINS[n]||(WINS[n]=Float32Array.from({length:n},(_,i)=>0.5-0.5*Math.cos(2*Math.PI*i/n)));}
+// STFT: nF cuadros repartidos entre las muestras s0 y s1; magnitudes en dB (0 dB = seno a escala completa)
+function stft(x,n,s0,s1,nF){s0=Math.max(0,s0|0);s1=Math.max(s0,Math.min(s1|0,x.length-n));nF=Math.max(1,Math.min(nF,Math.floor((s1-s0)/(n/4))+1));const w=hann(n),re=new Float64Array(n),im=new Float64Array(n),frames=[],pos=[];let mx=-200;
+for(let f=0;f<nF;f++){const p=nF>1?Math.round(s0+f*(s1-s0)/(nF-1)):s0;pos.push(p);for(let i=0;i<n;i++){re[i]=(x[p+i]||0)*w[i];im[i]=0;}fft(re,im,false);const m=new Float32Array(n/2);
+for(let b=0;b<n/2;b++){m[b]=20*Math.log10(Math.sqrt(re[b]*re[b]+im[b]*im[b])/(n/4)+1e-9);if(m[b]>mx)mx=m[b];}frames.push(m);}return{n,pos,frames,max:mx};}
+function segs(flags,times,minDur){const out=[];let s=-1;for(let i=0;i<=flags.length;i++){if(i<flags.length&&flags[i]){if(s<0)s=i;}else if(s>=0){const a=times[s],b=times[i-1];if(b-a>=minDur)out.push([a,b]);s=-1;}}return out;}
+// 1) energía casi ultrasónica
+function detectHigh(S,sr,cut){const k0=Math.round(cut*S.n/sr),flags=[],times=S.pos.map(p=>(p+S.n/2)/sr);let tot=0,hi=0;
+for(const m of S.frames){let a=0,b=0;for(let k=1;k<m.length;k++){const p=Math.pow(10,m[k]/10);a+=p;if(k>=k0)b+=p;}tot+=a;hi+=b;flags.push(b>1e-7&&b/a>0.01);}
+const sg=[];for(const q of segs(flags,times,0)){const l=sg[sg.length-1];if(l&&q[0]-l[1]<0.3)l[1]=q[1];else sg.push(q);}return{cut,percent:tot?100*hi/tot:0,segments:sg.filter(q=>q[1]-q[0]>=0.05)};}
+// 2) tonos puros persistentes
+function detectTones(S,sr){const nb=S.n/2,cnt=new Float32Array(nb);for(const m of S.frames)for(let k=3;k<nb-3;k++){const v=m[k];if(v>-75&&v>m[k-3]+12&&v>m[k+3]+12&&v>=m[k-1]&&v>=m[k+1])cnt[k]++;}
+const out=[];for(let k=3;k<nb-3;k++){const p=cnt[k]/S.frames.length;if(p>=0.5&&cnt[k]>=cnt[k-1]&&cnt[k]>=cnt[k+1]&&!out.some(o=>Math.abs(o.bin-k)<=3))out.push({bin:k,freq:Math.round(k*sr/S.n),persist:p});}
+return out.sort((a,b)=>b.persist-a.persist).slice(0,10);}
+function goertzel(x,s,N,f,sr){const w=2*Math.PI*f/sr,c=2*Math.cos(w);let a=0,b=0;for(let i=0;i<N;i++){const t=(x[s+i]||0)+c*a-b;b=a;a=t;}return Math.sqrt(Math.max(0,a*a+b*b-c*a*b))*2/N;}
+// 3) DTMF
+const DLO=[697,770,852,941],DHI=[1209,1336,1477,1633],DK=['123A','456B','789C','*0#D'];
+function dtmf(x,sr){const N=Math.round(0.04*sr),H=Math.round(0.02*sr),seq=[];let last=null,run=0,cur=null;
+for(let s=0;s+N<=x.length;s+=H){let e=0;for(let i=s;i<s+N;i++)e+=x[i]*x[i];e/=N;const lo=DLO.map(f=>goertzel(x,s,N,f,sr)),hi=DHI.map(f=>goertzel(x,s,N,f,sr));
+const li=lo.indexOf(Math.max(...lo)),hj=hi.indexOf(Math.max(...hi)),l2=[...lo].sort((a,b)=>b-a)[1],h2=[...hi].sort((a,b)=>b-a)[1];let d=null;
+if(lo[li]>0.02&&hi[hj]>0.02&&lo[li]>3*l2&&hi[hj]>3*h2&&(lo[li]**2+hi[hj]**2)/2>0.6*e)d=DK[li][hj];
+if(d&&d===cur){run++;if(run===2&&d!==last){seq.push({d,t:s/sr});last=d;}}else{cur=d;run=d?1:0;}if(!d)last=null;}
+return seq;}
+// 4) silencios
+function silences(x,sr,thr,minDur){thr=thr||-50;minDur=minDur||0.5;const F=Math.round(0.02*sr),flags=[],times=[];for(let s=0;s+F<=x.length;s+=F){let e=0;for(let i=s;i<s+F;i++)e+=x[i]*x[i];flags.push(10*Math.log10(e/F+1e-12)<thr);times.push(s/sr);}
+return segs(flags,times,minDur).map(([a,b])=>[a,b+F/sr]);}
+// 5) diferencia estéreo
+function stereoDiff(L,R){let a=0,d=0;const D=new Float32Array(L.length);for(let i=0;i<L.length;i++){D[i]=(L[i]-R[i])/2;a+=L[i]*L[i]+R[i]*R[i];d+=D[i]*D[i];}return{ratioDb:10*Math.log10(2*d/(a+1e-12)+1e-12),diff:D};}
+// 6) morse
+const MORSE={'.-':'A','-...':'B','-.-.':'C','-..':'D','.':'E','..-.':'F','--.':'G','....':'H','..':'I','.---':'J','-.-':'K','.-..':'L','--':'M','-.':'N','---':'O','.--.':'P','--.-':'Q','.-.':'R','...':'S','-':'T','..-':'U','...-':'V','.--':'W','-..-':'X','-.--':'Y','--..':'Z','-----':'0','.----':'1','..---':'2','...--':'3','....-':'4','.....':'5','-....':'6','--...':'7','---..':'8','----.':'9'};
+function morse(x,sr,freq){if(!freq){const n=4096,S=stft(x,n,0,x.length-n,200),avg=new Float64Array(n/2);for(const m of S.frames)for(let k=0;k<n/2;k++)avg[k]+=Math.pow(10,m[k]/10);let bk=0;for(let k=Math.round(200*n/sr);k<n/2;k++)if(avg[k]>avg[bk])bk=k;freq=bk*sr/n;}
+const N=Math.round(0.01*sr),H=Math.round(0.005*sr),env=[];for(let s=0;s+N<=x.length;s+=H)env.push(goertzel(x,s,N,freq,sr));const mx=Math.max(...env,1e-9),on=env.map(v=>v>0.4*mx);
+const runs=[];let st=0;for(let i=1;i<=on.length;i++)if(i===on.length||on[i]!==on[st]){runs.push({on:on[st],d:(i-st)*H/sr});st=i;}
+while(runs.length&&!runs[0].on)runs.shift();while(runs.length&&!runs[runs.length-1].on)runs.pop();const ons=runs.filter(r=>r.on).map(r=>r.d).sort((a,b)=>a-b);
+if(ons.length<3)return{freq:Math.round(freq),ok:false,text:'',code:''};const unit=ons[Math.floor(ons.length*0.2)];let code='',fit=0;
+for(const r of runs){if(r.on){const q=r.d<2*unit?'.':'-';code+=q;const u=r.d/unit;if((u>0.6&&u<1.5)||(u>2.2&&u<4))fit++;}else if(r.d>=5*unit)code+=' / ';else if(r.d>=2*unit)code+=' ';}
+const text=code.split(' / ').map(w=>w.split(' ').filter(Boolean).map(c=>MORSE[c]||'?').join('')).join(' ');const conf=fit/ons.length;
+return{freq:Math.round(freq),unit,code,text,ok:conf>0.8&&!/\?/.test(text),conf};}
+// 7) bytes
+const MAGIC=[[0,'89504E47','imagen PNG'],[0,'FFD8FF','foto JPEG'],[0,'47494638','imagen GIF'],[0,'25504446','documento PDF'],[0,'504B0304','ZIP (o Word/Excel/APK, que por dentro son ZIP)'],[0,'52617221','archivo RAR'],[0,'377ABCAF','archivo 7-Zip'],[0,'1F8B','archivo GZIP'],[0,'494433','MP3 (con etiquetas ID3)'],[0,'FFFB','MP3'],[0,'FFF3','MP3'],[0,'4F676753','audio OGG'],[0,'664C6143','audio FLAC'],[0,'4D5A','programa de Windows (EXE)'],[0,'7F454C46','programa de Linux (ELF)'],[0,'424D','imagen BMP'],[4,'66747970','MP4 / MOV / M4A (video o audio)'],[0,'1A45DFA3','video MKV / WEBM']];
+function hex(b,o,n){let s='';for(let i=o;i<o+n&&i<b.length;i++)s+=b[i].toString(16).padStart(2,'0').toUpperCase();return s;}
+function magic(b){if(hex(b,0,4)==='52494646'){const t=String.fromCharCode(...b.slice(8,12));return{kind:t==='WAVE'?'audio WAV':t==='WEBP'?'imagen WEBP':t==='AVI '?'video AVI':'archivo RIFF',sig:hex(b,0,12)};}
+for(const [o,h,k] of MAGIC)if(hex(b,o,h.length/2)===h)return{kind:k,sig:hex(b,0,8)};
+const n=Math.min(b.length,4096);let p=0;for(let i=0;i<n;i++){const c=b[i];if((c>=32&&c<127)||c===9||c===10||c===13||c>=0xC2)p++;}
+return{kind:n&&p/n>0.95?'texto':'desconocido (sin firma conocida)',sig:hex(b,0,8)};}
+function strings(b,min,max){min=min||6;max=max||300;const out=[];let s='';const lim=Math.min(b.length,5e6);for(let i=0;i<=lim;i++){const c=b[i];if(i<lim&&c>=32&&c<127)s+=String.fromCharCode(c);else{if(s.length>=min&&/[A-Za-z]{3}/.test(s))out.push(s);s='';if(out.length>=max)break;}}return out;}
+function bytesToSamples(b){const y=new Float32Array(b.length);for(let i=0;i<b.length;i++)y[i]=(b[i]-128)/128;return y;}
+// demo: voz + "BARBIE" escondido entre 15 y 20 kHz (solo en el canal izquierdo)
+function demo(sr){const N=sr*6,L=new Float32Array(N);let ph=0;for(let i=0;i<N;i++){const t=i/sr,f0=180+30*Math.sin(2*Math.PI*1.3*t),syl=0.5+0.5*Math.sin(2*Math.PI*3*t);ph+=2*Math.PI*f0/sr;for(let h=1;h<=18;h++)L[i]+=Math.sin(ph*h)/h*0.08*syl;}
+const R=Float32Array.from(L),m=synthMatrix(textMatrix('BARBIE',4),sr,15000,20000,3,0.25),o=Math.round(1.5*sr);for(let i=0;i<m.length;i++)L[o+i]+=m[i];return[L,R];}
+// sintetizadores para pruebas
+function tone(sr,f,d,a){return Float32Array.from({length:Math.round(sr*d)},(_,i)=>(a||0.5)*Math.sin(2*Math.PI*f*i/sr));}
+function cat(...a){const n=a.reduce((s,x)=>s+x.length,0),y=new Float32Array(n);let o=0;for(const x of a){y.set(x,o);o+=x.length;}return y;}
+function synthDTMF(sr,digits){const parts=[];for(const d of digits){let r=-1,c=-1;DK.forEach((row,i)=>{const j=row.indexOf(d);if(j>=0){r=i;c=j;}});const n=Math.round(0.1*sr);parts.push(Float32Array.from({length:n},(_,i)=>0.3*Math.sin(2*Math.PI*DLO[r]*i/sr)+0.3*Math.sin(2*Math.PI*DHI[c]*i/sr)),new Float32Array(n));}return cat(...parts);}
+function synthMorse(sr,text,f,unit){const inv={};for(const k in MORSE)inv[MORSE[k]]=k;const parts=[new Float32Array(Math.round(sr*unit*3))];
+for(const w of text.split(' ')){for(const ch of w){for(const s of inv[ch]){parts.push(tone(sr,f,unit*(s==='.'?1:3),0.5),new Float32Array(Math.round(sr*unit)));}parts.push(new Float32Array(Math.round(sr*unit*2)));}parts.push(new Float32Array(Math.round(sr*unit*4)));}return cat(...parts);}
+// visualizaciones (F = cuadros normalizados 0..1, de grave a agudo)
+function normFrames(S,nT,nF,fracMax){const out=[],lo=S.max-80,T=S.frames.length,B=Math.floor(S.frames[0].length*(fracMax||1));for(let i=0;i<nT;i++){const m=S.frames[Math.min(T-1,Math.floor(i*T/nT))],r=new Float32Array(nF);for(let j=0;j<nF;j++){let v=-200;const a=Math.floor(j*B/nF),b=Math.max(a+1,Math.floor((j+1)*B/nF));for(let k=a;k<b;k++)v=Math.max(v,m[k]);r[j]=Math.max(0,Math.min(1,(v-lo)/80));}out.push(r);}return out;}
+if(typeof module!=='undefined')module.exports={fft,stft,detectHigh,detectTones,goertzel,dtmf,silences,stereoDiff,morse,magic,strings,bytesToSamples,demo,tone,cat,synthDTMF,synthMorse,textMatrix,synthMatrix,normFrames};
+</script>
+<script>
+const $=id=>document.getElementById(id);let ctx,A=null,G=null,buf=null,src=null,playing=false,offset=0,startedAt=0,an,anL,anR,hist=[],lastBytes=null,lastFile=null;
+const secs=[...document.querySelectorAll('section')];secs.forEach((s,i)=>{const b=document.createElement('button');b.textContent=s.dataset.t;b.onclick=()=>{secs.forEach(z=>z.classList.remove('on'));document.querySelectorAll('#tabs button').forEach(z=>z.classList.remove('on'));s.classList.add('on');b.classList.add('on');setTimeout(()=>{if(A){if(i===1)drawSpecAll();if(i===3)drawMode();}},0);};$('tabs').appendChild(b);if(!i)b.click();});
+const goTab=i=>document.querySelectorAll('#tabs button')[i].click();
+function C(){if(!ctx){ctx=new AudioContext({sampleRate:48000});an=ctx.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0.5;const sp=ctx.createChannelSplitter(2);anL=ctx.createAnalyser();anR=ctx.createAnalyser();anL.fftSize=anR.fftSize=2048;an.connect(ctx.destination);an.connect(sp);sp.connect(anL,0);sp.connect(anR,1);}return ctx;}
+const say=t=>$('msg').textContent=t,tick=()=>new Promise(r=>setTimeout(r,20));
+const fmt=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');const kb=n=>n>1e6?(n/1e6).toFixed(1)+' MB':(n/1e3).toFixed(1)+' KB';
+// ---- entrada ----
+$('drop').onclick=()=>$('f').click();$('f').onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);
+['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('drop').classList.add('over');}));
+document.addEventListener('dragleave',()=>$('drop').classList.remove('over'));document.addEventListener('drop',e=>{e.preventDefault();$('drop').classList.remove('over');const f=e.dataTransfer.files[0];if(f)loadFile(f);});
+$('rate').onchange=()=>{if(A&&A.kind==='bytes')fromBytes(lastFile,lastBytes);};$('forceBytes').onchange=()=>{if(lastFile)loadFile(lastFile);};
+async function loadFile(file){stop();lastFile=file;say('Leyendo tu archivo… 📖');$('pg').hidden=false;$('pg').value=0.05;await tick();
+const bytes=new Uint8Array(await file.slice(0,300e6).arrayBuffer());lastBytes=bytes;
+if(!$('forceBytes').checked){try{const d=await C().decodeAudioData(bytes.slice(0).buffer);const cap=Math.min(d.length,d.sampleRate*300),ch=[];for(let c=0;c<Math.min(2,d.numberOfChannels);c++)ch.push(d.getChannelData(c).slice(0,cap));
+return setData({name:file.name,size:file.size,type:file.type,kind:'audio',sr:d.sampleRate,ch,fullDur:d.duration,nCh:d.numberOfChannels,bytes});}catch(e){}}
+fromBytes(file,bytes);}
+function fromBytes(file,bytes){const sr=+$('rate').value,cap=Math.min(bytes.length,sr*300);setData({name:file.name,size:file.size,type:file.type,kind:'bytes',sr,ch:[bytesToSamples(bytes.subarray(0,cap))],fullDur:bytes.length/sr,nCh:1,bytes});}
+$('demoB').onclick=()=>{stop();lastFile=null;const [L,R]=demo(48000);setData({name:'muestra_secreta_de_prueba.wav',size:L.length*4,type:'audio/wav',kind:'demo',sr:48000,ch:[L,R],fullDur:6,nCh:2,bytes:null});};
+async function setData(d){A=d;buf=null;offset=0;hist=[];const L=d.ch[0],R=d.ch[1]||d.ch[0];A.dur=L.length/d.sr;A.mono=new Float32Array(L.length);for(let i=0;i<L.length;i++)A.mono[i]=(L[i]+R[i])/2;
+if(d.ch[1]){const s=stereoDiff(L,R);A.diff=s.diff;A.stereoDb=s.ratioDb;}else A.diff=null;
+$('chan').innerHTML='<option value="m">Mezcla</option>'+(d.ch[1]?'<option value="L">Izquierda</option><option value="R">Derecha</option><option value="D">Diferencia L−R (lo que solo está en un lado)</option>':'');
+const mg=d.bytes?magic(d.bytes):{kind:'audio WAV (generado aquí)',sig:'—'};A.magic=mg;A.strs=d.bytes?strings(d.bytes):[];
+const rows=[['📄 Nombre',d.name],['📦 Tamaño',kb(d.size)],['🏷️ Tipo que dice el archivo',d.type||'(no dice)'],['🔍 Lo que es por dentro (firma)',mg.kind+' · '+mg.sig],['🎧 Cómo lo leí',d.kind==='bytes'?'Este archivo no es audio, así que leímos sus bytes como si fueran sonido (cada byte = una muestra de 8 bits).':'Como sonido'],
+['⏱️ Duración',fmt(d.fullDur)+(d.fullDur>300?' (analizo solo los primeros 5 minutos)':'')],['🎚️ Muestras por segundo',d.sr+' Hz (lo más agudo posible: '+(d.sr/2/1000).toFixed(1)+' kHz)'],['🔈 Canales',d.nCh+(d.nCh>1?' (estéreo)':' (mono)')]];
+$('info').innerHTML=rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1].replace(/</g,'&lt;')+'</td></tr>').join('');
+say((d.kind==='bytes'?'📎 Este archivo no es audio, así que leímos sus bytes como si fueran sonido. ':'')+'Analizando… ⏳');$('pg').hidden=false;$('pg').value=0.3;await tick();
+G=stft(A.mono,2048,0,A.mono.length-2048,1500);$('pg').value=0.6;await tick();$('f1').value=d.sr/2;$('f0').value=0;$('zt').value=1;$('pt').value=0;
+await runDetect();$('pg').value=1;$('play').disabled=false;$('tm').textContent='0:00 / '+fmt(A.dur);
+say((d.kind==='bytes'?'📎 Este archivo no es audio, así que leímos sus bytes como si fueran sonido. ':'')+'¡Listo! 💖 Ve a 🌈 Espectrograma, 🕵️ Detector o 🤪 Modos locos.');setTimeout(()=>$('pg').hidden=true,600);
+drawSpecAll();drawMode();}
+function sig(){const c=$('chan').value;return c==='L'?A.ch[0]:c==='R'?A.ch[1]:c==='D'?A.diff:A.mono;}
+// ---- paletas ----
+const PALS={rosa:[[0,0,0],[60,0,70],[200,30,140],[255,120,190],[255,240,250]],fuego:[[0,0,4],[80,18,123],[200,55,90],[252,150,60],[252,253,190]],arcoiris:[[0,0,40],[0,0,255],[0,255,255],[0,255,0],[255,255,0],[255,0,0]],gris:[[0,0,0],[255,255,255]]};
+const LUTS={};function lut(n){if(LUTS[n])return LUTS[n];const s=PALS[n],L=new Uint8Array(768);for(let i=0;i<256;i++){const t=i/255*(s.length-1),a=Math.floor(t),b=Math.min(s.length-1,a+1),f=t-a;for(let c=0;c<3;c++)L[i*3+c]=s[a][c]*(1-f)+s[b][c]*f;}return LUTS[n]=L;}
+// ---- espectrograma ----
+function renderSpec(cv,x,sr,n,t0,t1,f0,f1,log,con,bri,pal,bandNorm){const g=cv.getContext('2d'),W=cv.width,H=cv.height,img=g.createImageData(W,H),Lt=lut(pal);
+const S=stft(x,n,t0*sr-n/2,t1*sr-n/2,W),nb=n/2,lo0=Math.max(20,f0),rowBin=new Int32Array(H);
+for(let y=0;y<H;y++){const t=1-y/H,f=log?lo0*Math.pow(f1/lo0,t):f0+t*(f1-f0);rowBin[y]=f>sr/2?-1:Math.min(nb-1,Math.round(f*n/sr));}
+let top=S.max;if(bandNorm){top=-200;for(const m of S.frames)for(let y=0;y<H;y++){const b=rowBin[y];if(b>=0&&m[b]>top)top=m[b];}}top+= -bri;const lo=top-con;
+for(let c=0;c<W;c++){const m=S.frames[Math.round(c*(S.frames.length-1)/Math.max(1,W-1))];for(let y=0;y<H;y++){const b=rowBin[y],p=(y*W+c)*4;let v=b<0?0:(m[b]-lo)/(top-lo);v=Math.max(0,Math.min(1,v));const k=Math.round(v*255)*3;img.data[p]=Lt[k];img.data[p+1]=Lt[k+1];img.data[p+2]=Lt[k+2];img.data[p+3]=255;}}
+g.putImageData(img,0,0);g.font='12px sans-serif';g.fillStyle='#ffe0f0';const ticks=log?[50,100,200,500,1000,2000,5000,10000,15000,20000]:Array.from({length:7},(_,i)=>f0+i*(f1-f0)/6);
+for(const f of ticks){if(f<f0||f>f1)continue;const t=log?Math.log(f/lo0)/Math.log(f1/lo0):(f-f0)/(f1-f0),y=(1-t)*H;g.fillRect(0,y,6,1);g.fillText(f>=1000?(f/1000).toFixed(f%1000?1:0)+'k':Math.round(f)+'',8,Math.min(H-2,Math.max(11,y+4)));}
+for(let i=0;i<=5;i++){const t=t0+i*(t1-t0)/5;g.fillText(t.toFixed(t1-t0<5?2:1)+' s',Math.min(W-44,i*W/5+2),H-4);}return S;}
+function view(){const Z=+$('zt').value,span=A.dur/Z,t0=+$('pt').value/1000*(A.dur-span);return{t0,t1:t0+span,f0:Math.max(0,+$('f0').value),f1:Math.max(+$('f0').value+100,Math.min(A.sr/2,+$('f1').value))};}
+function drawSpecAll(){if(!A)return;const v=view(),x=sig();renderSpec($('sp'),x,A.sr,+$('nfft').value,v.t0,v.t1,v.f0,v.f1,$('fscale').value==='log',+$('con').value,+$('bri').value,$('pal').value,false);
+const s0=Math.floor(v.t0*A.sr),s1=Math.min(x.length,Math.ceil(v.t1*A.sr));for(const [id,kind] of [['wv','w'],['ld','l']]){const cv=$(id),g=cv.getContext('2d'),W=cv.width,H=cv.height;g.fillStyle='#1d0a18';g.fillRect(0,0,W,H);
+if(kind==='w'){g.strokeStyle='#ff7ac0';g.beginPath();for(let c=0;c<W;c++){const a=s0+Math.floor(c*(s1-s0)/W),b=Math.max(a+1,s0+Math.floor((c+1)*(s1-s0)/W));let mn=1,mx=-1;for(let i=a;i<b&&i<x.length;i++){if(x[i]<mn)mn=x[i];if(x[i]>mx)mx=x[i];}if(mx<mn){mn=mx=0;}g.moveTo(c+.5,H/2-mx*H/2);g.lineTo(c+.5,H/2-mn*H/2+1);}g.stroke();}
+else{g.fillStyle='#e64c9c';for(let c=0;c<W;c++){const a=s0+Math.floor(c*(s1-s0)/W),b=Math.max(a+1,s0+Math.floor((c+1)*(s1-s0)/W));let e=0;for(let i=a;i<b&&i<x.length;i++)e+=x[i]*x[i];const db=10*Math.log10(e/(b-a)+1e-12),h=Math.max(0,(db+60)/60)*H;g.fillRect(c,H-h,1,h);}g.fillStyle='#ffe0f0';g.font='11px sans-serif';g.fillText('fuerte',3,11);g.fillText('silencio',3,H-3);}}overlays();}
+['chan','nfft','fscale','pal','con','bri','zt','pt','f0','f1'].forEach(id=>$(id).addEventListener(id==='con'||id==='bri'||id==='zt'||id==='pt'?'change':'change',drawSpecAll));['con','bri','zt','pt'].forEach(id=>$(id).addEventListener('input',()=>{clearTimeout(window._dt);window._dt=setTimeout(drawSpecAll,120);}));
+$('resetV').onclick=()=>{$('zt').value=1;$('pt').value=0;$('f0').value=0;$('f1').value=A?A.sr/2:24000;drawSpecAll();};
+function showRange(t0,t1,f0,f1){const span=Math.max(0.2,t1-t0),Z=Math.min(60,Math.max(1,A.dur/span));$('zt').value=Z;const sp=A.dur/Z;$('pt').value=A.dur>sp?Math.max(0,Math.min(1000,(t0-(sp-span)/2)/(A.dur-sp)*1000)):0;if(f0!=null){$('f0').value=Math.max(0,Math.round(f0));$('f1').value=Math.round(Math.min(A.sr/2,f1));}goTab(1);}
+function pos(){return playing?Math.min(A.dur,ctx.currentTime-startedAt):offset;}
+function overlays(mx){if(!A)return;const v=view(),p=pos();for(const id of['spo','wvo','ldo']){const cv=$(id),g=cv.getContext('2d');g.clearRect(0,0,cv.width,cv.height);const x=(p-v.t0)/(v.t1-v.t0)*cv.width;if(x>=0&&x<=cv.width){g.fillStyle='#fff';g.fillRect(x-1,0,2,cv.height);}if(mx!=null){g.fillStyle='#ffffff66';g.fillRect(mx,0,1,cv.height);}}}
+const spo=$('spo');function evPos(e){const r=spo.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*spo.width,cy=(e.clientY-r.top)/r.height,v=view(),t=v.t0+cx/spo.width*(v.t1-v.t0),tt=1-cy,lo0=Math.max(20,v.f0),f=$('fscale').value==='log'?lo0*Math.pow(v.f1/lo0,tt):v.f0+tt*(v.f1-v.f0);return{cx,t,f};}
+spo.onmousemove=e=>{if(!A)return;const q=evPos(e);$('cur').textContent='⏱️ '+q.t.toFixed(2)+' s  ·  🎵 '+Math.round(q.f).toLocaleString('es-MX')+' Hz'+(q.f>17000?'  (agudísimo 🦇)':'');overlays(q.cx);};
+spo.onclick=e=>{if(A)seek(evPos(e).t);};
+$('pngS').onclick=()=>savePNG($('sp'),'espectrograma');$('pngZ').onclick=()=>savePNG($('sus'),'zona_sospechosa');
+function savePNG(cv,n){const a=document.createElement('a');a.href=cv.toDataURL('image/png');a.download=n+'.png';a.click();}
+// ---- detector ----
+function card(hit,title,html){return'<div class="find'+(hit?' hit':'')+'"><h4>'+(hit?'🚩 ':'✅ ')+title+'</h4>'+html+'</div>';}
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+async function runDetect(){if(!A)return;$('finds').innerHTML='<p>Buscando… 🔎</p>';await tick();const sr=A.sr,x=A.mono,cut=+$('cut').value;let h='';window._ranges=[];const btn=(t0,t1,f0,f1)=>{window._ranges.push([t0,t1,f0,f1]);return' <button class="mini alt" onclick="showRange(..._ranges['+(window._ranges.length-1)+'])">👀 Ver</button>';};
+if(sr/2>cut){const d=detectHigh(G,sr,cut);const hit=d.segments.length>0;h+=card(hit,'Sonidos agudísimos (arriba de '+cut/1000+' kHz)',hit?'<p>Encontré sonido en la zona que casi nadie oye ('+d.percent.toFixed(1)+'% de toda la energía). Puede ser un mensaje escondido, una marca, un "faro"… o solo platillos muy brillantes.</p>'+d.segments.slice(0,12).map(s=>'• de '+s[0].toFixed(2)+' s a '+s[1].toFixed(2)+' s'+btn(s[0]-0.3,s[1]+0.3,cut-2000,sr/2)).join('<br>'):'<p>No hay casi nada allá arriba. Todo normalito.</p>');}
+else h+=card(false,'Sonidos agudísimos','<p>Este audio solo llega hasta '+(sr/2/1000).toFixed(1)+' kHz, así que ahí no cabe nada casi ultrasónico.</p>');
+const tn=detectTones(G,sr);h+=card(tn.length>0,'Pitidos fijos (tonos puros que no cambian)',tn.length?'<p>Hay notas que se quedan iguales casi todo el tiempo. Así son algunas marcas de agua o "faros" de sonido, pero también un zumbido de luz o una nota larga de la canción.</p>'+tn.map(t=>'• '+t.freq.toLocaleString('es-MX')+' Hz, presente el '+Math.round(t.persist*100)+'% del tiempo'+btn(0,A.dur,Math.max(0,t.freq-1500),t.freq+1500)).join('<br>'):'<p>No vi pitidos fijos.</p>');
+await tick();const dt=sr>=4000?dtmf(x,sr):[];h+=card(dt.length>0,'Tonos de teléfono (DTMF, las teclas del teléfono)',dt.length?'<p>¡Escuché teclas de teléfono! Dicen: <b style="font-size:20px">'+dt.map(e=>e.d).join('')+'</b></p>'+btn(dt[0].t-0.3,dt[dt.length-1].t+0.5,0,2000):'<p>No hay tonos de teclado telefónico.</p>');
+const si=silences(x,sr);h+=card(false,'Silencios',si.length?'<p>Partes calladitas (más de medio segundo):</p>'+si.slice(0,10).map(s=>'• '+s[0].toFixed(2)+'–'+s[1].toFixed(2)+' s'+btn(s[0]-0.5,s[1]+0.5)).join('<br>'):'<p>No hay silencios largos.</p>');
+if(A.diff){const db=A.stereoDb,hit=db>-40;h+=card(hit,'Diferencias entre izquierda y derecha',db<-90?'<p>Los dos lados son idénticos (en realidad es mono).</p>':'<p>Lo que es distinto entre los dos lados está a '+db.toFixed(1)+' dB del total. '+(hit?'Es bastante: ahí se puede esconder algo que con audífonos casi no notas.':'Es poquito, normal en una grabación.')+'</p><button class="mini alt" onclick="$(\'chan\').value=\'D\';$(\'resetV\').click();goTab(1)">👀 Ver solo la diferencia L−R</button>');}
+await tick();const mo=morse(x,sr,+$('mf').value||0);h+=card(mo.ok,'Morse (pitidos largos y cortos)',mo.ok?'<p>¡Parece morse en '+mo.freq+' Hz! Dice: <b style="font-size:20px">'+esc(mo.text)+'</b></p><small>'+mo.code+'</small>':'<p>No encontré morse claro'+(mo.code?' (mi mejor intento en '+mo.freq+' Hz fue «'+esc(mo.text.slice(0,30))+'», pero no me convence)':'')+'.</p>');
+const mg=A.magic,ext=(A.name.split('.').pop()||'').toLowerCase();h+=card(A.kind==='bytes','Qué es el archivo por dentro (su "firma")','<p>Por su nombre termina en <b>.'+esc(ext)+'</b> y por dentro parece: <b>'+esc(mg.kind)+'</b> <small>(primeros bytes: '+mg.sig+')</small>.</p>');
+if(A.bytes){const s=A.strs;h+=card(s.length>0,'Textos escondidos en los bytes',s.length?'<p>Encontré '+s.length+(s.length>=300?'+':'')+' pedacitos de texto legible. Muchos son normales (datos del programa que lo hizo), pero a veces hay mensajes o metadatos:</p><pre>'+esc(s.slice(0,80).join('\n'))+'</pre>':'<p>No encontré textos legibles.</p>');}
+$('finds').innerHTML=h;
+const sus=$('sus');if(sr/2>14000)renderSpec(sus,x,sr,2048,0,A.dur,14000,sr/2,false,45,0,$('pal').value,true);else{const g=sus.getContext('2d');g.fillStyle='#1d0a18';g.fillRect(0,0,sus.width,sus.height);g.fillStyle='#ffe0f0';g.font='18px sans-serif';g.fillText('Este audio no llega hasta 14 kHz, no hay zona aguda que revisar 🙂',20,130);}}
+$('runD').onclick=runDetect;$('cut').onchange=runDetect;
+// ---- modos locos ----
+const TIPS={letras:'🔤 Cada letrita es un pedacito de sonido: mientras más llena la letra (@ # %), más fuerte. Abajo graves, arriba agudos. Si escribes una palabra, la dibujo con la forma del sonido: grande = fuerte, arriba = agudo.',mandala:'🌸 El tiempo da la vuelta como un reloj y los agudos van hacia afuera, repetido como espejo para que salga un mandala.',montanas:'🏔️ Cada montañita es un momento del sonido; los picos son las notas fuertes. Las de enfrente son lo más reciente.',liss:'💫 La danza entre izquierda y derecha: si es una raya vertical, los dos lados son iguales (mono); si se abre como nube, son distintos.',pintura:'🎨 Una pintura única hecha con tu sonido: cada color es una zona (graves en tonos cálidos, agudos en morados) y el tamaño es qué tan fuerte suena.'};
+function rs(F,nT,nF){const out=[];for(let i=0;i<nT;i++){const m=F[Math.min(F.length-1,Math.floor(i*F.length/nT))],r=new Float32Array(nF);for(let j=0;j<nF;j++){let v=0;const a=Math.floor(j*m.length/nF),b=Math.max(a+1,Math.floor((j+1)*m.length/nF));for(let k=a;k<b;k++)v=Math.max(v,m[k]);r[j]=v;}out.push(r);}return out;}
+function frames(nT,nF){const lv=$('live').checked&&playing&&hist.length>4;if(lv)return rs(hist,nT,nF);return normFrames(G,nT,nF,Math.min(1,20000/(A.sr/2)));}
+function drawMode(){if(!A)return;const m=$('mode').value,cv=$('cz'),g=cv.getContext('2d'),W=cv.width,H=cv.height,lv=$('live').checked&&playing;$('modeTip').textContent=TIPS[m];$('letOpts').style.display=m==='letras'?'flex':'none';$('ascii').hidden=true;
+g.globalAlpha=1;g.fillStyle='#1d0a18';g.fillRect(0,0,W,H);
+if(m==='letras'){if($('lstyle').value==='ascii'&&!$('word').value){const cols=lv?100:150,rows=lv?40:60,F=frames(cols,rows),ch=' .:-=+*#%@';let s='';g.font='bold '+Math.ceil(H/rows)+'px monospace';g.textBaseline='top';
+for(let r=0;r<rows;r++){for(let c=0;c<cols;c++){const v=F[c][rows-1-r],k=Math.min(9,Math.floor(v*10));s+=ch[k];if(k){g.fillStyle='hsl('+(330-r*1.5)+',90%,'+(35+v*55)+'%)';g.fillText(ch[k],c*W/cols,r*H/rows);}}s+='\n';}$('ascii').textContent=s;$('ascii').hidden=lv;}
+else{const word=($('word').value||'BARBIE').toUpperCase(),N=lv?40:90,F=frames(N,64);g.textAlign='center';g.textBaseline='middle';
+for(let i=0;i<N;i++){const f=F[i];let s=0,w=0;for(let j=0;j<f.length;j++){s+=f[j];w+=f[j]*j;}const loud=s/f.length,cen=s?w/s/f.length:0,size=10+loud*160;g.font='900 '+size+'px system-ui';g.fillStyle='hsla('+(300+cen*90)+',90%,'+(55+loud*30)+'%,'+(0.35+loud*0.65)+')';
+g.fillText(word[i%word.length],(i+0.5)*W/N,H*0.9-cen*H*0.8);}g.textAlign='start';}}
+else if(m==='mandala'){const nT=lv?90:220,nF=lv?50:90,F=frames(nT,nF),cx=W/2,cy=H/2,R=H/2-8,r0=28,sl=8,rot=lv?performance.now()/4000:0;
+for(let i=0;i<nT;i++)for(let j=0;j<nF;j++){const v=F[i][j];if(v<0.18)continue;g.fillStyle='hsla('+(320-j*2)+',90%,'+(40+v*45)+'%,'+v+')';const rr=r0+j/nF*(R-r0),sz=2+v*3;
+for(let s=0;s<sl;s++){const u=i/nT,a=rot+(s+(s%2?1-u:u))*2*Math.PI/sl;g.fillRect(cx+rr*Math.cos(a)-sz/2,cy+rr*Math.sin(a)-sz/2,sz,sz);}}
+g.fillStyle='#ff7ac0';g.beginPath();g.arc(cx,cy,r0-8,0,7);g.fill();}
+else if(m==='montanas'){const K=lv?40:56,nF=160,F=frames(K,nF);for(let k=0;k<K;k++){const by=H*0.22+k*(H*0.74/K),f=F[k];g.beginPath();g.moveTo(W*0.06,by);for(let j=0;j<nF;j++){const v=f[j];g.lineTo(W*0.06+j/(nF-1)*W*0.88,by-v*v*H*0.28);}g.lineTo(W*0.94,by);g.closePath();g.fillStyle='#1d0a18';g.fill();g.strokeStyle='hsl('+(330-k)+',90%,'+(50+k/K*30)+'%)';g.lineWidth=1.6;g.stroke();}}
+else if(m==='liss'){let L,R;if(lv){L=new Float32Array(2048);R=new Float32Array(2048);anL.getFloatTimeDomainData(L);anR.getFloatTimeDomainData(R);}else{L=A.ch[0];R=A.ch[1]||A.ch[0];}
+const n=Math.min(L.length,150000),st=L.length/n;let mx=1e-6;for(let i=0;i<n;i++){const k=Math.floor(i*st);mx=Math.max(mx,Math.abs(L[k]),Math.abs(R[k]));}const sc=H*0.32/mx;g.fillStyle=lv?'#ff7ac0':'rgba(255,122,192,0.12)';
+for(let i=0;i<n;i++){const k=Math.floor(i*st),a=L[k],b=R[k];g.fillRect(W/2+(a-b)*0.707*sc,H/2-(a+b)*0.707*sc,lv?2:1.5,lv?2:1.5);}g.fillStyle='#ffe0f0';g.font='14px sans-serif';g.fillText('↕ igual en los dos lados   ↔ distinto',12,H-12);}
+else{const r=rng(Math.round(G.max*1000)+G.frames.length),nT=lv?30:80,nB=12,F=frames(nT,nB),gr=g.createLinearGradient(0,0,W,H);gr.addColorStop(0,'#fff0f7');gr.addColorStop(1,'#f3e3ff');g.fillStyle=gr;g.fillRect(0,0,W,H);
+for(let i=0;i<nT;i++)for(let b=0;b<nB;b++){const v=F[i][b];if(v<0.2)continue;g.fillStyle='hsla('+((20+b*25)%360)+',85%,'+(70-v*25)+'%,'+(0.18+v*0.3)+')';g.beginPath();g.arc((i+r())*W/nT,H-(b+r())*H/nB,4+v*v*70,0,7);g.fill();}
+g.lineCap='round';for(let i=1;i<nT;i++){const p=F[i-1],q=F[i],bp=p.indexOf(Math.max(...p)),bq=q.indexOf(Math.max(...q));g.strokeStyle='hsla('+(300+bq*5)+',80%,45%,0.5)';g.lineWidth=2+Math.max(...q)*10;g.beginPath();g.moveTo((i-0.5)*W/nT,H-(bp+0.5)*H/nB);g.bezierCurveTo((i-0.2)*W/nT,r()*H,(i+0.2)*W/nT,r()*H,(i+0.5)*W/nT,H-(bq+0.5)*H/nB);g.stroke();}}}
+['mode','lstyle','live'].forEach(id=>$(id).onchange=drawMode);$('word').oninput=()=>{clearTimeout(window._wt);window._wt=setTimeout(drawMode,200);};$('pngM').onclick=()=>savePNG($('cz'),'modo_'+$('mode').value);
+// ---- reproductor ----
+function buildBuf(){C();if(buf)return buf;buf=ctx.createBuffer(A.ch.length,A.ch[0].length,A.sr);A.ch.forEach((c,i)=>buf.copyToChannel(c,i));return buf;}
+function play(){C().resume();buildBuf();src=ctx.createBufferSource();src.buffer=buf;src.connect(an);const me=src;src.onended=()=>{if(src===me&&playing){playing=false;offset=0;$('play').textContent='▶️ Play';}};src.start(0,offset);startedAt=ctx.currentTime-offset;playing=true;$('play').textContent='⏸️ Pausa';}
+function stop(){if(src){const s=src;src=null;try{s.stop()}catch(e){}}if(playing)offset=pos();playing=false;$('play').textContent='▶️ Play';}
+function seek(t){const was=playing;stop();offset=Math.max(0,Math.min(A.dur-0.01,t));if(was)play();overlays();}
+$('play').onclick=()=>{if(!A)return;playing?stop():play();};$('seek').oninput=()=>A&&seek($('seek').value/1000*A.dur);
+function loop(){requestAnimationFrame(loop);if(!A||!playing)return;const p=pos();$('tm').textContent=fmt(p)+' / '+fmt(A.dur);$('seek').value=p/A.dur*1000;overlays();
+if($('live').checked&&secs[3].classList.contains('on')){const d=new Float32Array(an.frequencyBinCount);an.getFloatFrequencyData(d);const n=Math.floor(d.length*Math.min(1,20000/(ctx.sampleRate/2))),r=new Float32Array(n);for(let i=0;i<n;i++)r[i]=Math.max(0,Math.min(1,(d[i]+100)/70));hist.push(r);if(hist.length>200)hist.shift();drawMode();}}loop();
+</script></body></html>
